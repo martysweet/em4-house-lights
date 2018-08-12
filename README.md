@@ -26,4 +26,4 @@ You can downlad Crouzet Soft for free from http://automation.crouzet.com/product
 - 4x 10A MCB
 
 ## Wiring Schematic
-![Wiring Schematic](https://github.com/martysweet/em4-house-lights/blob/master/Dimmable%20Lighting%20-%20Wiring%20Schematic.png?raw=true)
+![Wiring Schematic](https://github.com/martysweet/em4-house-lights/blob/master/dimmer-schematic.png?raw=true)
