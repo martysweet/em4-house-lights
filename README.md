@@ -10,3 +10,9 @@ You can downlad Crouzet Soft for free from http://automation.crouzet.com/product
 - Sunset detection (dims all lights at sunset)
 - Solar pulse counter
 - Water pulse counter
+
+## Hardware
+- 4x Modbus Dimmers https://www.aliexpress.com/item/4-way-thyristor-dimming-module-RS485-Modbus/32827560823.html
+- 1x EM4 Ethernet http://automation.crouzet.com/products/em4-nano-plc/on-site-management/ethernet/
+- 1x EM4 Master Modbus Adapter http://automation.crouzet.com/products/accessories/em4-accessories/
+- 1x EM4 Digital Expansion http://automation.crouzet.com/products/expansion-modules/em4-expansions/digital-expansions/
