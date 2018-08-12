@@ -23,7 +23,8 @@ You can downlad Crouzet Soft for free from http://automation.crouzet.com/product
 - 1x USB Network Adapter
 - 1x 5v PSU
 - 1x 24v PSU
-- 4x 10A MCB
+- 4x 10A MCB (One per dimmer unit)
+- 1x 3A MCB (5v + 24v PSU)
 
 ## Wiring Schematic
 ![Wiring Schematic](https://github.com/martysweet/em4-house-lights/blob/master/dimmer-schematic.png?raw=true)
