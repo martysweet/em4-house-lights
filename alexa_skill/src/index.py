@@ -53,26 +53,43 @@ DEVICE_TEMPLATE =     {
            ]
     }
 
-def generate_device():
+def generate_devices():
 
     devices = []
 
     for l in LIGHTS:
         d = dict(DEVICE_TEMPLATE)
-        d['endpointId'] = "light-" + l[0]
-        d['friendlyName'] = l[1]
+        d['endpointId'] = "light-" + str(l[0])
+        d['friendlyName'] = str(l[1])
         devices.append(d)
 
     return devices
+
+
+def generate_deferred_response(correlationToken):
+    return {
+        "event": {
+            "header": {
+                "namespace": "Alexa",
+                "name": "DeferredResponse",
+                "messageId": str(uuid4()),
+                "correlationToken": correlationToken,
+                "payloadVersion": "3"
+            },
+            "payload": {
+                "estimatedDeferralInSeconds": 2
+            }
+        }
+    }
 
 def lambda_handler(event, context):
     global btn
     print(event)
 
-    namespace = event.get("directive").get("header").get("namespace")
-    name = event.get("directive").get("header").get("name")
-    correlationToken = event.get("directive").get("header").get("correlationToken")
-    endpointId = event.get("endpoint").get("endpointId")
+    namespace = event.get("directive", {}).get("header", {}).get("namespace")
+    name = event.get("directive", {}).get("header", {}).get("name")
+    correlationToken = event.get("directive", {}).get("header", {}).get("correlationToken")
+    endpointId = event.get("endpoint", {}).get("endpointId")
 
     if namespace == "Alexa.Authorization":
         print("Accepting Authorization Request")
@@ -98,7 +115,7 @@ def lambda_handler(event, context):
                     "messageId": str(uuid4())
                 },
                 "payload": {
-                    "endpoints": generate_device()
+                    "endpoints": generate_devices()
                 }
             }
         }
