@@ -6,52 +6,53 @@ Resources:
   AlexaSkillFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/
+      CodeUri: src/alexa
       Handler: index.lambda_handler
       Runtime: python3.6
-#      Events:
-#        AlexaSkillEvent:
-#          Type: AlexaSkill
+      Environment:
+        Variables:
+          TOKEN_TABLE: !Ref TokenTable
+      Policies:
+        - AWSLambdaExecute
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TokenTable
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+           - Effect: Allow
+             Action:
+               - iot:Publish
+             Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/lighting/*'
 
+  ResponseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/response_handler
+      Handler: index.lambda_handler
+      Runtime: python3.6
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TokenTable
+      Environment:
+        Variables:
+          TOKEN_TABLE: !Ref TokenTable
+      Events:
+        IoT:
+          Type: IoTRule
+          Properties:
+            AwsIotSqlVersion: 2016-03-23
+            Sql: "SELECT * FROM 'lighting/response'"
+
+  TokenTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: bearer
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
 
   IdentityPool:
     Type: "AWS::Cognito::IdentityPool"
     Properties:
-      AllowUnauthenticatedIdentities: true
-
-  RoleAttachment:
-    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
-    Properties:
-      IdentityPoolId: !Ref IdentityPool
-      Roles:
-        unauthenticated: !GetAtt Role.Arn
-
-  Role:
-    Type: "AWS::IAM::Role"
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Federated: cognito-identity.amazonaws.com
-          Action: sts:AssumeRoleWithWebIdentity
-          Condition:
-              StringEquals:
-                cognito-identity.amazonaws.com:aud: !Ref IdentityPool
-              ForAnyValue:StringLike:
-                cognito-identity.amazonaws.com:amr: unauthenticated
-
-      Path: "/"
-      Policies:
-      - PolicyName: root
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-              - "dynamodb:Scan"
-              - "dynamodb:PutItem"
-              - "dynamodb:DeleteItem"
-            Resource:
-              - !Sub "arn:aws:dynamodb:*:${AWS::AccountId}:table/Temp"
+      AllowUnauthenticatedIdentities: false
