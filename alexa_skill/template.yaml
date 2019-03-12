@@ -7,8 +7,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/alexa
-      Handler: index.lambda_handler
-      Runtime: python3.6
+      Handler: main.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
       Environment:
         Variables:
           TOKEN_TABLE: !Ref TokenTable
@@ -27,8 +28,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/response_handler
-      Handler: index.lambda_handler
-      Runtime: python3.6
+      Handler: main.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TokenTable
@@ -46,7 +48,7 @@ Resources:
     Type: AWS::Serverless::SimpleTable
     Properties:
       PrimaryKey:
-        Name: bearer
+        Name: client_id
         Type: String
       ProvisionedThroughput:
         ReadCapacityUnits: 2

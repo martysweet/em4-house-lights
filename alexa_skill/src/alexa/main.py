@@ -1,5 +1,4 @@
 from uuid import uuid4
-import datetime
 import boto3
 import requests
 import os
@@ -9,11 +8,11 @@ import urllib.request
 from jose import jwk, jwt
 from jose.utils import base64url_decode
 
+# Setup the AWS clients
 client = boto3.client('iot-data')
 ddb_client = boto3.client('dynamodb')
 
-btn = 50
-
+# Define the lights available
 LIGHTS = [
     [2, "Lounge Rear Light"],
     [3, "Lounge Lobby Light"],
@@ -76,19 +75,23 @@ DEVICE_TEMPLATE = {
 r = ddb_client.get_item(
     TableName=os.environ['TOKEN_TABLE'],
     Key={
-        'bearer': {  # TODO: client_id might be better
+        'client_id': {
             'S': 'LWA_AUTH'
         }
     }
 )
 
+if not r['Item']:
+    raise Exception("LWA_AUTH not present in database.")
+
 LWA_id = r['Item']['id']['S']
 LWA_secret = r['Item']['secret']['S']
 
+# Get the cognito pool id
 r = ddb_client.get_item(
     TableName=os.environ['TOKEN_TABLE'],
     Key={
-        'bearer': {  # TODO: client_id might be better
+        'client_id': {
             'S': 'COGNITO_POOL'
         }
     }
@@ -96,9 +99,7 @@ r = ddb_client.get_item(
 
 keys_url = 'https://cognito-idp.{}.amazonaws.com/{}/.well-known/jwks.json'.format(r['Item']['region']['S'],
                                                                                   r['Item']['id']['S'])
-# instead of re-downloading the public keys every time
-# we download them only on cold start
-# https://aws.amazon.com/blogs/compute/container-reuse-in-lambda/
+# Download the keys for Cognito once
 with urllib.request.urlopen(keys_url) as url:
     response = url.read()
 keys = json.loads(response.decode('utf-8'))['keys']
@@ -136,6 +137,7 @@ def simple_jwt_validation(token):
 
 
 def generate_devices():
+    """ Create a list of devices for discovery. """
     devices = []
 
     for l in LIGHTS:
@@ -147,14 +149,15 @@ def generate_devices():
     return devices
 
 
-def generate_deferred_response(correlationToken):
+def generate_deferred_response(correlation_token):
+    """ Generate a deferred response, the response handler will return the value later. """
     return {
         "event": {
             "header": {
                 "namespace": "Alexa",
                 "name": "DeferredResponse",
                 "messageId": str(uuid4()),
-                "correlationToken": correlationToken,
+                "correlationToken": correlation_token,
                 "payloadVersion": "3"
             },
             "payload": {
@@ -165,19 +168,18 @@ def generate_deferred_response(correlationToken):
 
 
 def lambda_handler(event, context):
-    global btn
+
     print(event)
 
     scope = event.get("directive", {}).get("endpoint", {}).get("scope", {})
     namespace = event.get("directive", {}).get("header", {}).get("namespace")
     name = event.get("directive", {}).get("header", {}).get("name")
-    correlationToken = event.get("directive", {}).get("header", {}).get("correlationToken")
-    endpointId = event.get("directive", {}).get("endpoint", {}).get("endpointId")
+    correlation_token = event.get("directive", {}).get("header", {}).get("correlationToken")
+    endpoint_id = event.get("directive", {}).get("endpoint", {}).get("endpointId")
 
     if namespace == "Alexa.Authorization" and name == "AcceptGrant":
+        # Handle an authentication setup
         print("Accepting Authorization Request")
-
-        # https://developer.amazon.com/docs/smarthome/authenticate-a-customer-permissions.html#steps-for-asynchronous-message-authentication
 
         # Store Token, grantee -> token represents the user
         # Use the grant > code
@@ -192,16 +194,15 @@ def lambda_handler(event, context):
         }
 
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=UTF-8'}
-        r = requests.post('https://api.amazon.com/auth/o2/token', data=body, headers=headers)
+        token_request = requests.post('https://api.amazon.com/auth/o2/token', data=body, headers=headers)
 
-        print(r.text)
-        j = r.json()
-
+        _, client_id = simple_jwt_validation(event.get("directive").get("payload").get("grantee").get("token"))
+        j = token_request.json()
         ddb_client.put_item(
             TableName=os.environ['TOKEN_TABLE'],
             Item={
-                'bearer': {
-                    'S': event.get("directive").get("payload").get("grantee").get("token")
+                'client_id': {
+                    'S': client_id
                 },
                 'access_token': {
                     'S': j.get("access_token"),
@@ -215,13 +216,7 @@ def lambda_handler(event, context):
             }
         )
 
-        #
-        # bearer str
-        # access_token str
-        # access_expiry unix
-        # refresh_token str
-        #
-
+        # Return the Auth response
         return {
             "event": {
                 "header": {
@@ -239,10 +234,10 @@ def lambda_handler(event, context):
     authed, client_id = simple_jwt_validation(scope['token'])
     if authed is False:
         print("Invalid incoming token")
-        exit()
+        return False
 
     if namespace == "Alexa.Discovery":
-        response = {
+        return {
             "event": {
                 "header": {
                     "namespace": "Alexa.Discovery",
@@ -255,22 +250,15 @@ def lambda_handler(event, context):
                 }
             }
         }
-        return response
     elif namespace == "Alexa" and name == "ReportState":
         # Send the message
-        send_iot_message("lighting/request", "ReportState", endpointId, None, client_id, correlationToken)
-
-        # Returned async response
-        return generate_deferred_response(correlationToken)
+        send_iot_message("lighting/request", "ReportState", endpoint_id, None, client_id, correlation_token)
+        return generate_deferred_response(correlation_token)
     elif namespace == "Alexa.PowerController":
-
         # Send the request via IOT
-        send_iot_message("lighting/request", "PowerController", endpointId, name, client_id, correlationToken)
-
-        # Returned async response
-        return generate_deferred_response(correlationToken)
+        send_iot_message("lighting/request", "PowerController", endpoint_id, name, client_id, correlation_token)
+        return generate_deferred_response(correlation_token)
     elif namespace == "Alexa.BrightnessController":
-
         # Send the request via IOT
         if name == "AdjustBrightness":
             action = "BrightnessController.Adjust"
@@ -280,21 +268,21 @@ def lambda_handler(event, context):
             val = int(event.get("directive").get("payload").get("brightness"))
         else:
             print("Unknown Brightness Action")
-            return
+            return False
 
         # Send the message
-        send_iot_message("lighting/request", action, endpointId, val, client_id, correlationToken)
+        send_iot_message("lighting/request", action, endpoint_id, val, client_id, correlation_token)
 
         # Returned async response
-        return generate_deferred_response(correlationToken)
+        return generate_deferred_response(correlation_token)
 
 
-def send_iot_message(topic, action, light_id, value, scope, correlation_token):
+def send_iot_message(topic, action, light_id, value, client_id, correlation_token):
     body = {
         "action": action,
         "light_id": light_id,
         "value": value,
-        "scope": scope,
+        "client_id": client_id,
         "correlation_token": correlation_token
     }
 

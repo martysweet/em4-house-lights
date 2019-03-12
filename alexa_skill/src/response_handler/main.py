@@ -1,4 +1,3 @@
-import json
 import requests
 import datetime
 import boto3
@@ -7,30 +6,34 @@ import time
 from uuid import uuid4
 
 ddb_client = boto3.client('dynamodb')
-# Takes IOT message and generates an async response to the Alexa event gateway
 
 # Get LWA secrets
 r = ddb_client.get_item(
     TableName=os.environ['TOKEN_TABLE'],
     Key={
-        'bearer': {
+        'client_id': {
             'S': 'LWA_AUTH'
         }
     }
 )
+
+if not r['Item']:
+    raise Exception("LWA_AUTH not present in database.")
 
 LWA_id = r['Item']['id']['S']
 LWA_secret = r['Item']['secret']['S']
 
 
 def lambda_handler(event, context):
-    print(event)
+    """ Handle the incoming response event from the IOT. """
+    print("Incoming event: {}".format(event))
 
+    # Parse the event
     action = event.get("action")
     light_id = event.get("light_id")
     light_value = event.get("value")
     correlation_token = event.get("correlation_token")
-    client_id = event.get("scope")
+    client_id = event.get("client_id")
 
     if action == "ReportState":
         event_name = "StateReport"
@@ -54,7 +57,8 @@ def lambda_handler(event, context):
         }
     }
 
-    if action == "PowerController" or action == "ReportState" or action == "BrightnessController.Set" or action == "BrightnessController.Adjust":
+    valid_actions = ['PowerController', 'ReportState', 'BrightnessController.Set', 'BrightnessController.Adjust']
+    if action in valid_actions:
         power_state = light_value.get("powerState")
         brightness = light_value.get("brightness")
         body['context'] = {
@@ -77,40 +81,64 @@ def lambda_handler(event, context):
         }
 
     else:
-        print("Unknown action")
-        exit()
+        print("Unknown action. Event: {}".format(event))
+        return False
 
-    # Check if we have a valid access_token
-    r = ddb_client.get_item(
+    # Get valid access_token for the client
+    response_access_token = get_access_token(client_id)
+
+    body['event']['endpoint']['scope'] = {
+        "type": "BearerToken",
+        "token": response_access_token
+    }
+
+    # Compose response
+    headers = {'Content-type': 'application/json', "Authorization": "Bearer " + response_access_token}
+    alexa_event_post = requests.post('https://api.eu.amazonalexa.com/v3/events', json=body, headers=headers)
+
+    if alexa_event_post.status_code != 202:
+        print("Event update failed. Request: {} Response: {} {}".format(body,
+                                                                        alexa_event_post.status_code,
+                                                                        alexa_event_post.text))
+        raise Exception("Event update failed")
+
+    return True
+
+
+def get_access_token(client_id):
+    """ Gets an access token for the client to report back to the Alexa Service"""
+    user_token = ddb_client.get_item(
         TableName=os.environ['TOKEN_TABLE'],
         Key={
-            'bearer': {
+            'client_id': {
                 'S': client_id
             }
         }
     )
 
-    print(r)
+    if not user_token['Item']:
+        print("Could not find record for {}".format(client_id))
+        raise Exception()
 
-    if int(r['Item']['access_expiry']["N"]) < int(time.time() - 3):
+    if user_token['Item'] and int(user_token['Item']['access_expiry']["N"]) > int(time.time() - 3):
+        return user_token['Item']['access_token']["S"]
+    else:
         # Get new token
         body = {
             "grant_type": "refresh_token",
-            "refresh_token": r['Item']['refresh_token']["S"],
+            "refresh_token": user_token['Item']['refresh_token']["S"],
             "client_id": LWA_id,
             "client_secret": LWA_secret
         }
 
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=UTF-8'}
-        r = requests.post('https://api.amazon.com/auth/o2/token', data=body, headers=headers)
-
-        print(r.text)
-        j = r.json()
+        user_token = requests.post('https://api.amazon.com/auth/o2/token', data=body, headers=headers)
+        j = user_token.json()
 
         ddb_client.put_item(
             TableName=os.environ['TOKEN_TABLE'],
             Item={
-                'bearer': {
+                'client_id': {
                     'S': client_id
                 },
                 'access_token': {
@@ -125,31 +153,4 @@ def lambda_handler(event, context):
             }
         )
 
-        access_token = j.get("access_token")
-    else:
-        access_token = r['Item']['access_token']["S"]
-
-    body['event']['endpoint']['scope'] = {
-        "type": "BearerToken",
-        "token": access_token
-    }
-
-    print(body)
-
-    # Compose response
-    headers = {'Content-type': 'application/json', "Authorization": "Bearer " + access_token}
-    r = requests.post('https://api.eu.amazonalexa.com/v3/events', json=body, headers=headers)
-
-    print("Response:" + str(r))
-    print(r.text)
-
-    req = r.request
-
-    print('{}\n{}\n{}\n\n{}'.format(
-        '-----------START-----------',
-        req.method + ' ' + req.url,
-        '\n'.join('{}: {}'.format(k, v) for k, v in req.headers.items()),
-        req.body,
-    ))
-
-    pass
+        return j.get("access_token")
