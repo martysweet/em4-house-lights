@@ -171,7 +171,11 @@ def lambda_handler(event, context):
 
     print(event)
 
-    scope = event.get("directive", {}).get("endpoint", {}).get("scope", {})
+    scope = event.get("directive", {}).get("endpoint", {}).get("scope", None)
+
+    if scope is None:
+        scope = event.get("payload", {}).get("scope", None)
+
     namespace = event.get("directive", {}).get("header", {}).get("namespace")
     name = event.get("directive", {}).get("header", {}).get("name")
     correlation_token = event.get("directive", {}).get("header", {}).get("correlationToken")
@@ -231,6 +235,10 @@ def lambda_handler(event, context):
         }
 
     # Authorise the request against our pool
+    if scope is None:
+        print("Failed to get a valid scope from incoming event, not attempting authentication")
+        return False
+
     authed, client_id = simple_jwt_validation(scope['token'])
     if authed is False:
         print("Invalid incoming token")
