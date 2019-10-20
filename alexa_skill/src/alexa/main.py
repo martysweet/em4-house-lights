@@ -14,18 +14,18 @@ ddb_client = boto3.client('dynamodb')
 
 # Define the lights available
 LIGHTS = [
-    [2, "Lounge Rear Light"],
+    [2, "Lounge Front Light"],
     [3, "Lounge Lobby Light"],
     [4, "Hallway Light"],
     [5, "Kitchen Ceiling Light"],
-    [6, "Kitchen Island Light"],
-    [7, "Kitchen Table Light"],
+    # [6, "Kitchen Island Light"],
+    [7, "Gym Light"],
     [9, "Landing Light"],
     [10, "Bathroom Light"],
     [11, "Office Light"],
     [12, "Spare Room Light"],
     [13, "Bedroom Light"],
-    [14, "Lounge Front Light"],
+    [14, "Lounge Rear Light"],
     [15, "Side Light"]
 ]
 
