@@ -176,6 +176,9 @@ def lambda_handler(event, context):
     if scope is None:
         scope = event.get("payload", {}).get("scope", None)
 
+    if scope is None:
+        scope = event.get("directive", {}).get("payload", {}).get("scope", None)
+
     namespace = event.get("directive", {}).get("header", {}).get("namespace")
     name = event.get("directive", {}).get("header", {}).get("name")
     correlation_token = event.get("directive", {}).get("header", {}).get("correlationToken")
