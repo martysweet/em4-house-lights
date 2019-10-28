@@ -4,6 +4,7 @@ import requests
 import os
 import json
 import time
+import copy
 import urllib.request
 from jose import jwk, jwt
 from jose.utils import base64url_decode
@@ -26,7 +27,8 @@ LIGHTS = [
     [12, "Spare Room Light"],
     [13, "Bedroom Light"],
     [14, "Lounge Rear Light"],
-    [15, "Side Light"]
+    [15, "Side Light"],
+    [16, "Outside Light"]
 ]
 
 DEVICE_TEMPLATE = {
@@ -56,7 +58,10 @@ DEVICE_TEMPLATE = {
             "interface": "Alexa",
             "version": "3"
         },
-        {
+    ]
+}
+
+DIMMABLE_CAPABILITY = {
             "type": "AlexaInterface",
             "interface": "Alexa.BrightnessController",
             "version": "3",
@@ -67,9 +72,7 @@ DEVICE_TEMPLATE = {
                 "proactivelyReported": False,
                 "retrievable": True
             }
-        },
-    ]
-}
+        }
 
 # Get LWA secrets
 r = ddb_client.get_item(
@@ -141,9 +144,11 @@ def generate_devices():
     devices = []
 
     for l in LIGHTS:
-        d = dict(DEVICE_TEMPLATE)
+        d = copy.deepcopy(dict(DEVICE_TEMPLATE))
         d['endpointId'] = str(l[0])
         d['friendlyName'] = str(l[1])
+        if l[0] < 16:
+            d['capabilities'].append(DIMMABLE_CAPABILITY)
         devices.append(d)
 
     return devices

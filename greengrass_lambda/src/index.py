@@ -31,14 +31,21 @@ def lambda_handler(event, context):
         setpoint_bin = bin_str[l-1]
         setpoint_bin = "OFF" if (setpoint_bin == "0") else "ON"
 
-        resp = {"brightness": current_light_brightness, "powerState": setpoint_bin}
+        if l < 16:
+            resp = {"brightness": current_light_brightness, "powerState": setpoint_bin}
+        else:
+            resp = {"powerState": setpoint_bin}
+
         send_response("lighting/response", action, light_id, resp, client_id, correlation_token)
         return True
 
     elif action == "PowerController":
         if request_value == "TurnOn":
             # Get current brightness for the light_id
-            setpoint_value = current_light_brightness
+            if l < 16:
+                setpoint_value = current_light_brightness
+            else:
+                setpoint_value = 1
         elif request_value == "TurnOff":
             setpoint_value = 0
         else:
